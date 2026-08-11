@@ -3,6 +3,7 @@
     "name": "Life",
     "slug": "Life",
     "version": "1.0.0",
+    "scheme": "life",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -20,6 +21,17 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar"
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "0f09ad4b-e0c6-42b7-9ba7-110d354f1e90"
+      }
+    },
+    "owner": "maorlifeproj"
   }
 }
