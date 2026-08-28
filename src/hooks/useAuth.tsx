@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
+import * as Linking from 'expo-linking';
 import { supabase } from '../db/client';
 
 interface AuthValue {
@@ -39,7 +40,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (error) throw new Error(error.message);
       },
       async signUp(email, password) {
-        const { error } = await supabase.auth.signUp({ email, password });
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          // Without this, Supabase falls back to the dashboard's Site URL,
+          // which won't match wherever this build is actually running.
+          options: { emailRedirectTo: Linking.createURL('/') },
+        });
         if (error) throw new Error(error.message);
       },
       async signOut() {

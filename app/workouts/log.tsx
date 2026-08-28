@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import {
   Button,
   Card,
@@ -10,9 +10,11 @@ import {
   Row,
   Screen,
   SectionTitle,
-} from '../../../src/components/ui';
-import { DateNavigator } from '../../../src/components/DateNavigator';
-import { colors, spacing } from '../../../src/components/theme';
+} from '../../src/components/ui';
+import { DateNavigator } from '../../src/components/DateNavigator';
+import { InfoTooltip } from '../../src/components/InfoTooltip';
+import { colors, spacing } from '../../src/components/theme';
+import { useLanguage } from '../../src/hooks/useLanguage';
 import {
   createSession,
   deleteSession,
@@ -21,26 +23,30 @@ import {
   getSessionsByDate,
   updateSession,
   type NewSet,
-} from '../../../src/db/queries/workouts';
+} from '../../src/db/queries/workouts';
 import {
   GYM_TYPE,
-  MUSCLE_GROUPS,
+  OTHER_TYPE,
   WORKOUT_INTENSITY_TIERS,
   WORKOUT_TYPES,
+  getMuscleGroupOptions,
+  getWorkoutIntensityOptions,
   muscleLabel,
+  workoutIntensityLabel,
+  workoutTypeLabel,
   type MuscleGroup,
-} from '../../../src/domain/workoutTypes';
+} from '../../src/domain/workoutTypes';
 import {
-  estimateCalories,
+  distanceFieldLabel,
   formatDistance,
   formatDuration,
   formatPace,
   getActivityKind,
   getDistanceConfig,
-} from '../../../src/domain/cardio';
-import { useProfile } from '../../../src/hooks/useProfile';
-import { today } from '../../../src/domain/dates';
-import type { WorkoutIntensity, WorkoutSessionWithSets } from '../../../src/types';
+  paceFieldLabel,
+} from '../../src/domain/cardio';
+import { today } from '../../src/domain/dates';
+import type { WorkoutIntensity, WorkoutSessionWithSets } from '../../src/types';
 
 interface DraftSet {
   weightKg: string;
@@ -54,18 +60,11 @@ interface DraftExercise {
 
 type DraftByMuscle = Record<string, DraftExercise[]>;
 
-const INTENSITY_OPTIONS = WORKOUT_INTENSITY_TIERS.map((t) => ({
-  label: t.label,
-  value: t.value,
-}));
-
-function intensityLabel(intensity: WorkoutIntensity): string {
-  return WORKOUT_INTENSITY_TIERS.find((t) => t.value === intensity)?.label ?? intensity;
-}
-
-export default function WorkoutsScreen() {
+export default function WorkoutLogScreen() {
   const router = useRouter();
-  const { profile } = useProfile();
+  const { sessionId } = useLocalSearchParams<{ sessionId?: string }>();
+  const { t, isRTL } = useLanguage();
+  const align = isRTL ? 'right' : 'left';
   const [date, setDate] = useState(today());
   const [sessions, setSessions] = useState<WorkoutSessionWithSets[]>([]);
   const [exerciseNames, setExerciseNames] = useState<string[]>([]);
@@ -85,8 +84,10 @@ export default function WorkoutsScreen() {
   const [openMuscle, setOpenMuscle] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingTemplateId, setEditingTemplateId] = useState<number | null>(null);
+  const [autoOpenedFor, setAutoOpenedFor] = useState<string | null>(null);
 
-  const effectiveType = workoutType === 'אחר' ? customType.trim() || 'אחר' : workoutType;
+  const effectiveType = workoutType === OTHER_TYPE ? customType.trim() || OTHER_TYPE : workoutType;
   const activityKind = getActivityKind(effectiveType);
   const isGym = activityKind === 'gym';
   const distanceConfig = getDistanceConfig(effectiveType);
@@ -100,14 +101,8 @@ export default function WorkoutsScreen() {
   })();
   const durationMinutes = parseFloat(durationMin) || null;
   const paceText = distanceConfig
-    ? formatPace(distanceKm, durationMinutes, distanceConfig.paceKind)
+    ? formatPace(distanceKm, durationMinutes, distanceConfig.paceKind, t)
     : null;
-  const caloriesEstimate = estimateCalories(
-    effectiveType,
-    intensity,
-    durationMinutes,
-    profile?.weightKg ?? null
-  );
 
   const load = useCallback(async () => {
     const [s, names] = await Promise.all([getSessionsByDate(date), getExerciseNames()]);
@@ -214,12 +209,14 @@ export default function WorkoutsScreen() {
     setDraft({});
     setOpenMuscle(null);
     setEditingId(null);
+    setEditingTemplateId(null);
   }
 
   function startEditing(session: WorkoutSessionWithSets) {
     setEditingId(session.id);
+    setEditingTemplateId(session.templateId);
     const known = WORKOUT_TYPES.includes(session.workoutType);
-    setWorkoutType(known ? session.workoutType : 'אחר');
+    setWorkoutType(known ? session.workoutType : OTHER_TYPE);
     setCustomType(known ? '' : session.workoutType);
     setIntensity(session.intensity);
     setAvgHr(session.avgHeartRate != null ? String(session.avgHeartRate) : '');
@@ -255,6 +252,17 @@ export default function WorkoutsScreen() {
     setDraft(rebuilt);
     setOpenMuscle(session.muscleGroups[0] ?? null);
   }
+
+  // Coming here from Home with ?sessionId=X — jump straight into editing
+  // today's checked-off stub instead of making the user find it again.
+  useEffect(() => {
+    if (!sessionId || autoOpenedFor === sessionId) return;
+    const match = sessions.find((s) => String(s.id) === sessionId);
+    if (match) {
+      startEditing(match);
+      setAutoOpenedFor(sessionId);
+    }
+  }, [sessionId, sessions, autoOpenedFor]);
 
   function buildSets(): NewSet[] {
     const result: NewSet[] = [];
@@ -297,6 +305,7 @@ export default function WorkoutsScreen() {
             ? parseFloat(elevation) || null
             : null,
         sets: isGym ? buildSets() : [],
+        templateId: editingTemplateId,
       };
       if (editingId != null) {
         await updateSession(editingId, payload);
@@ -310,83 +319,70 @@ export default function WorkoutsScreen() {
     }
   }
 
-  const selectedTier = WORKOUT_INTENSITY_TIERS.find((t) => t.value === intensity);
-
   return (
-    <Screen>
-      <SectionTitle>אימונים</SectionTitle>
+    <Screen showLogo={false}>
+      <SectionTitle>{t('workouts.title')}</SectionTitle>
 
       <DateNavigator date={date} onChange={setDate} />
 
       <Card>
-        <SectionTitle>{editingId != null ? 'עריכת אימון' : 'אימון חדש'}</SectionTitle>
+        <SectionTitle>{editingId != null ? t('workouts.editWorkout') : t('workouts.newWorkout')}</SectionTitle>
 
-        <Text style={{ color: colors.muted, fontSize: 13, textAlign: 'right' }}>סוג האימון</Text>
+        <Text style={{ color: colors.muted, fontSize: 13, textAlign: align }}>{t('workouts.type')}</Text>
         <PillSelect
-          options={[...WORKOUT_TYPES, 'אחר'].map((t) => ({ label: t, value: t }))}
+          options={[...WORKOUT_TYPES, OTHER_TYPE].map((type) => ({
+            label: workoutTypeLabel(type, t),
+            value: type,
+          }))}
           value={workoutType}
           onChange={setWorkoutType}
         />
-        {workoutType === 'אחר' && (
-          <Field label="שם האימון" value={customType} onChangeText={setCustomType} />
+        {workoutType === OTHER_TYPE && (
+          <Field label={t('workouts.name')} value={customType} onChangeText={setCustomType} />
         )}
 
-        <Text style={{ color: colors.muted, fontSize: 13, textAlign: 'right' }}>עצימות</Text>
-        <PillSelect options={INTENSITY_OPTIONS} value={intensity} onChange={setIntensity} />
-        <View
-          style={{
-            gap: 6,
-            paddingTop: spacing.sm,
-            borderTopWidth: 1,
-            borderTopColor: colors.border,
-          }}
-        >
-          <Text style={{ color: colors.muted, fontSize: 12, textAlign: 'right' }}>
-            מה כל רמת עצימות אומרת? (מבחן הדיבור)
-          </Text>
-          {WORKOUT_INTENSITY_TIERS.map((tier) => {
-            const isCurrent = tier.value === intensity;
-            return (
-              <Text key={tier.value} style={{ textAlign: 'right', fontSize: 12, lineHeight: 18 }}>
-                <Text
-                  style={{
-                    fontWeight: '700',
-                    color: colors.text,
-                    backgroundColor: isCurrent ? 'rgba(242,192,55,0.35)' : 'transparent',
-                  }}
-                >
-                  {tier.label}
+        <Row style={{ justifyContent: isRTL ? 'flex-end' : 'flex-start', gap: 6 }}>
+          <InfoTooltip>
+            <Text style={{ color: colors.text, fontWeight: '700', fontSize: 14, textAlign: align, marginBottom: 4 }}>
+              {t('workouts.intensityMeaning')}
+            </Text>
+            {WORKOUT_INTENSITY_TIERS.map((tier) => (
+              <Text key={tier.value} style={{ textAlign: align, fontSize: 13, lineHeight: 19 }}>
+                <Text style={{ fontWeight: '700', color: colors.text }}>
+                  {workoutIntensityLabel(tier.value, t)}
                 </Text>
-                <Text style={{ color: colors.muted }}> (RPE {tier.rpe}/10) — </Text>
-                <Text style={{ color: colors.muted }}>{tier.description}</Text>
+                <Text style={{ color: colors.muted }}> ({t('workouts.rpe', { rpe: tier.rpe })}) — </Text>
+                <Text style={{ color: colors.muted }}>{t(`intensity.${tier.value}.description`)}</Text>
               </Text>
-            );
-          })}
-        </View>
+            ))}
+          </InfoTooltip>
+          <Text style={{ color: colors.muted, fontSize: 13, textAlign: align }}>{t('workouts.intensity')}</Text>
+        </Row>
+        <PillSelect options={getWorkoutIntensityOptions(t)} value={intensity} onChange={setIntensity} />
 
-        <Text style={{ color: colors.muted, fontSize: 13, textAlign: 'right' }}>
-          דופק (לא חובה — אם מדדת עם שעון)
+        <Text style={{ color: colors.muted, fontSize: 13, textAlign: align }}>
+          {t('workouts.heartRateOptional')}
         </Text>
         <Row style={{ gap: spacing.sm }}>
           <View style={{ flex: 1 }}>
-            <Field label="דופק ממוצע" keyboardType="numeric" value={avgHr} onChangeText={setAvgHr} />
+            <Field label={t('workouts.avgHeartRate')} keyboardType="numeric" value={avgHr} onChangeText={setAvgHr} />
           </View>
           <View style={{ flex: 1 }}>
-            <Field label="דופק מקסימלי" keyboardType="numeric" value={maxHr} onChangeText={setMaxHr} />
+            <Field label={t('workouts.maxHeartRate')} keyboardType="numeric" value={maxHr} onChangeText={setMaxHr} />
           </View>
         </Row>
 
         {activityKind !== 'gym' && (
           <View style={{ gap: spacing.sm }}>
-            <Text style={{ color: colors.muted, fontSize: 13, textAlign: 'right' }}>
-              נתוני המאמץ
+            <Text style={{ color: colors.muted, fontSize: 13, textAlign: align }}>
+              {t('workouts.effortData')}
             </Text>
 
             {distanceConfig ? (
               <Row style={{ gap: spacing.sm }}>
                 <View style={{ flex: 1 }}>
                   <Field
-                    label={distanceConfig.distanceLabel}
+                    label={distanceFieldLabel(distanceConfig, t)}
                     keyboardType="numeric"
                     value={distance}
                     onChangeText={setDistance}
@@ -394,7 +390,7 @@ export default function WorkoutsScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Field
-                    label="משך (דקות)"
+                    label={t('workouts.durationMinutes')}
                     keyboardType="numeric"
                     value={durationMin}
                     onChangeText={setDurationMin}
@@ -403,7 +399,7 @@ export default function WorkoutsScreen() {
               </Row>
             ) : (
               <Field
-                label="משך (דקות)"
+                label={t('workouts.durationMinutes')}
                 keyboardType="numeric"
                 value={durationMin}
                 onChangeText={setDurationMin}
@@ -412,14 +408,14 @@ export default function WorkoutsScreen() {
 
             {distanceConfig?.showElevation && (
               <Field
-                label="עלייה מצטברת (מטרים)"
+                label={t('workouts.elevation')}
                 keyboardType="numeric"
                 value={elevation}
                 onChangeText={setElevation}
               />
             )}
 
-            {(paceText || caloriesEstimate) && (
+            {paceText && distanceConfig && (
               <View
                 style={{
                   backgroundColor: colors.cardAlt,
@@ -430,26 +426,16 @@ export default function WorkoutsScreen() {
                   borderColor: colors.border,
                 }}
               >
-                {paceText && distanceConfig && (
-                  <Row>
-                    <Text style={{ color: colors.accentText, fontWeight: '700' }}>{paceText}</Text>
-                    <Text style={{ color: colors.muted, textAlign: 'right' }}>
-                      {distanceConfig.paceLabel}
-                    </Text>
-                  </Row>
-                )}
+                <Row>
+                  <Text style={{ color: colors.accentText, fontWeight: '700' }}>{paceText}</Text>
+                  <Text style={{ color: colors.muted, textAlign: align }}>
+                    {paceFieldLabel(distanceConfig, t)}
+                  </Text>
+                </Row>
                 {durationMinutes && (
                   <Row>
-                    <Text style={{ color: colors.text }}>{formatDuration(durationMinutes)}</Text>
-                    <Text style={{ color: colors.muted, textAlign: 'right' }}>משך</Text>
-                  </Row>
-                )}
-                {caloriesEstimate && (
-                  <Row>
-                    <Text style={{ color: colors.text }}>{caloriesEstimate} קק״ל</Text>
-                    <Text style={{ color: colors.muted, textAlign: 'right' }}>
-                      שריפה משוערת
-                    </Text>
+                    <Text style={{ color: colors.text }}>{formatDuration(durationMinutes, t)}</Text>
+                    <Text style={{ color: colors.muted, textAlign: align }}>{t('workouts.duration')}</Text>
                   </Row>
                 )}
               </View>
@@ -457,14 +443,14 @@ export default function WorkoutsScreen() {
           </View>
         )}
 
-        <Field label="הערות (לא חובה)" value={notes} onChangeText={setNotes} />
+        <Field label={t('workouts.notesOptional')} value={notes} onChangeText={setNotes} />
 
         {isGym && (
           <View style={{ gap: spacing.sm }}>
-            <Text style={{ color: colors.muted, fontSize: 13, textAlign: 'right' }}>
-              אילו שרירים אימנת? (אפשר לבחור כמה)
+            <Text style={{ color: colors.muted, fontSize: 13, textAlign: align }}>
+              {t('workouts.whichMuscles')}
             </Text>
-            <MultiPillSelect options={MUSCLE_GROUPS} values={muscles} onToggle={toggleMuscle} />
+            <MultiPillSelect options={getMuscleGroupOptions(t)} values={muscles} onToggle={toggleMuscle} />
 
             {muscles.map((muscle) => (
               <MuscleSection
@@ -479,23 +465,25 @@ export default function WorkoutsScreen() {
                 onAddSet={(i) => addSet(muscle, i)}
                 onRemoveSet={(i, j) => removeSet(muscle, i, j)}
                 onUpdateSet={(i, j, field, value) => updateSet(muscle, i, j, field, value)}
+                t={t}
+                align={align}
               />
             ))}
           </View>
         )}
 
         <Button
-          title={saving ? 'שומר...' : editingId != null ? 'עדכן אימון' : 'שמור אימון'}
+          title={saving ? t('common.saving') : editingId != null ? t('workouts.updateWorkout') : t('workouts.saveWorkout')}
           onPress={handleSave}
           disabled={saving}
         />
-        {editingId != null && <Button title="בטל עריכה" variant="secondary" onPress={resetForm} />}
+        {editingId != null && <Button title={t('common.cancelEdit')} variant="secondary" onPress={resetForm} />}
       </Card>
 
       <Card>
-        <SectionTitle>האימונים של היום</SectionTitle>
+        <SectionTitle>{t('workouts.todaysWorkouts')}</SectionTitle>
         {sessions.length === 0 && (
-          <Text style={{ color: colors.muted, textAlign: 'right' }}>אין אימונים ביום זה</Text>
+          <Text style={{ color: colors.muted, textAlign: align }}>{t('workouts.noWorkoutsThisDay')}</Text>
         )}
         {sessions.map((s) => (
           <View
@@ -510,38 +498,39 @@ export default function WorkoutsScreen() {
             <Row>
               <View style={{ flexDirection: 'row', gap: spacing.sm, alignItems: 'center' }}>
                 <Pressable onPress={() => deleteSession(s.id).then(load)}>
-                  <Text style={{ color: colors.danger, fontSize: 12 }}>הסר</Text>
+                  <Text style={{ color: colors.danger, fontSize: 12 }}>{t('common.remove')}</Text>
                 </Pressable>
                 <Pressable onPress={() => startEditing(s)}>
-                  <Text style={{ color: colors.accentText, fontSize: 12 }}>ערוך</Text>
+                  <Text style={{ color: colors.accentText, fontSize: 12 }}>{t('common.edit')}</Text>
                 </Pressable>
               </View>
               <Pressable
                 onPress={() => router.push(`/workouts/session/${s.id}`)}
                 style={{ alignItems: 'flex-end', flex: 1 }}
               >
-                <Text style={{ color: colors.text, fontWeight: '700' }}>{s.workoutType}</Text>
+                <Text style={{ color: colors.text, fontWeight: '700' }}>{workoutTypeLabel(s.workoutType, t)}</Text>
                 <Text style={{ color: colors.muted, fontSize: 12 }}>
-                  עצימות {intensityLabel(s.intensity)}
-                  {s.avgHeartRate ? ` · דופק ממוצע ${Math.round(s.avgHeartRate)}` : ''}
-                  {s.maxHeartRate ? ` · מקס ${Math.round(s.maxHeartRate)}` : ''}
+                  {t('workouts.intensity')} {workoutIntensityLabel(s.intensity, t)}
+                  {s.avgHeartRate ? ` · ${t('workouts.avgHeartRateShort', { value: Math.round(s.avgHeartRate) })}` : ''}
+                  {s.maxHeartRate ? ` · ${t('workouts.maxHeartRateShort', { value: Math.round(s.maxHeartRate) })}` : ''}
                 </Text>
               </Pressable>
             </Row>
 
             {(s.distanceKm != null || s.durationMinutes != null) && (
-              <Text style={{ color: colors.muted, fontSize: 12, textAlign: 'right' }}>
+              <Text style={{ color: colors.muted, fontSize: 12, textAlign: align }}>
                 {[
-                  s.distanceKm != null ? formatDistance(s.distanceKm, s.workoutType) : null,
-                  formatDuration(s.durationMinutes),
+                  s.distanceKm != null ? formatDistance(s.distanceKm, s.workoutType, t) : null,
+                  formatDuration(s.durationMinutes, t),
                   getDistanceConfig(s.workoutType)
                     ? formatPace(
                         s.distanceKm,
                         s.durationMinutes,
-                        getDistanceConfig(s.workoutType)!.paceKind
+                        getDistanceConfig(s.workoutType)!.paceKind,
+                        t
                       )
                     : null,
-                  s.elevationM ? `${Math.round(s.elevationM)} מ׳ עלייה` : null,
+                  s.elevationM ? t('workouts.elevationLine', { value: Math.round(s.elevationM) }) : null,
                 ]
                   .filter(Boolean)
                   .join(' · ')}
@@ -549,7 +538,7 @@ export default function WorkoutsScreen() {
             )}
 
             {s.muscleGroups.length > 0 && (
-              <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: spacing.xs }}>
+              <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', flexWrap: 'wrap', gap: spacing.xs }}>
                 {s.muscleGroups.map((muscle) => {
                   const count = s.sets.filter((set) => set.muscleGroup === muscle).length;
                   return (
@@ -566,8 +555,8 @@ export default function WorkoutsScreen() {
                       }}
                     >
                       <Text style={{ color: colors.text, fontSize: 12 }}>
-                        {muscleLabel(muscle)}
-                        {count > 0 ? ` · ${count} סטים` : ''}
+                        {muscleLabel(muscle, t)}
+                        {count > 0 ? ` · ${t('workouts.setsShort', { count })}` : ''}
                       </Text>
                     </Pressable>
                   );
@@ -575,7 +564,7 @@ export default function WorkoutsScreen() {
               </View>
             )}
             {s.notes ? (
-              <Text style={{ color: colors.muted, fontSize: 12, textAlign: 'right' }}>{s.notes}</Text>
+              <Text style={{ color: colors.muted, fontSize: 12, textAlign: align }}>{s.notes}</Text>
             ) : null}
           </View>
         ))}
@@ -583,8 +572,8 @@ export default function WorkoutsScreen() {
 
       {exerciseNames.length > 0 && (
         <Card>
-          <SectionTitle>התקדמות לפי תרגיל</SectionTitle>
-          <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: spacing.xs }}>
+          <SectionTitle>{t('workouts.progressByExercise')}</SectionTitle>
+          <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', flexWrap: 'wrap', gap: spacing.xs }}>
             {exerciseNames.map((name) => (
               <Pressable
                 key={name}
@@ -619,6 +608,8 @@ function MuscleSection({
   onAddSet,
   onRemoveSet,
   onUpdateSet,
+  t,
+  align,
 }: {
   muscle: string;
   open: boolean;
@@ -635,7 +626,10 @@ function MuscleSection({
     field: keyof DraftSet,
     value: string
   ) => void;
+  t: (key: string, vars?: Record<string, string | number>) => string;
+  align: 'left' | 'right';
 }) {
+  const { isRTL } = useLanguage();
   const [newExercise, setNewExercise] = useState('');
   const setCount = exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
 
@@ -653,9 +647,9 @@ function MuscleSection({
         <Row>
           <Text style={{ color: colors.accentText, fontSize: 16 }}>{open ? '−' : '+'}</Text>
           <View style={{ alignItems: 'flex-end' }}>
-            <Text style={{ color: colors.text, fontWeight: '700' }}>{muscleLabel(muscle)}</Text>
+            <Text style={{ color: colors.text, fontWeight: '700' }}>{muscleLabel(muscle, t)}</Text>
             <Text style={{ color: colors.muted, fontSize: 11 }}>
-              {exercises.length} תרגילים · {setCount} סטים
+              {t('workouts.exercisesAndSets', { exercises: exercises.length, sets: setCount })}
             </Text>
           </View>
         </Row>
@@ -664,13 +658,13 @@ function MuscleSection({
       {open && (
         <View style={{ padding: spacing.sm, paddingTop: 0, gap: spacing.sm }}>
           <Field
-            label="הוסף תרגיל"
-            placeholder="שם התרגיל"
+            label={t('workouts.addExercise')}
+            placeholder={t('workouts.exerciseName')}
             value={newExercise}
             onChangeText={setNewExercise}
           />
           <Button
-            title="הוסף תרגיל"
+            title={t('workouts.addExercise')}
             variant="secondary"
             onPress={() => {
               onAddExercise(newExercise);
@@ -680,10 +674,10 @@ function MuscleSection({
 
           {suggestions.length > 0 && (
             <View style={{ gap: 4 }}>
-              <Text style={{ color: colors.muted, fontSize: 11, textAlign: 'right' }}>
-                תרגילים שביצעת בעבר:
+              <Text style={{ color: colors.muted, fontSize: 11, textAlign: align }}>
+                {t('workouts.pastExercises')}
               </Text>
-              <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: spacing.xs }}>
+              <View style={{ flexDirection: isRTL ? 'row-reverse' : 'row', flexWrap: 'wrap', gap: spacing.xs }}>
                 {suggestions.map((name) => (
                   <Pressable
                     key={name}
@@ -716,7 +710,7 @@ function MuscleSection({
             >
               <Row>
                 <Pressable onPress={() => onRemoveExercise(exerciseIndex)}>
-                  <Text style={{ color: colors.danger, fontSize: 12 }}>הסר תרגיל</Text>
+                  <Text style={{ color: colors.danger, fontSize: 12 }}>{t('workouts.removeExercise')}</Text>
                 </Pressable>
                 <Text style={{ color: colors.text, fontWeight: '700' }}>{exercise.name}</Text>
               </Row>
@@ -728,7 +722,7 @@ function MuscleSection({
                   </Pressable>
                   <View style={{ flex: 1 }}>
                     <Field
-                      label="חזרות"
+                      label={t('workouts.reps')}
                       keyboardType="numeric"
                       value={set.reps}
                       onChangeText={(v) => onUpdateSet(exerciseIndex, setIndex, 'reps', v)}
@@ -736,17 +730,19 @@ function MuscleSection({
                   </View>
                   <View style={{ flex: 1 }}>
                     <Field
-                      label="משקל (ק״ג)"
+                      label={t('workouts.weightKg')}
                       keyboardType="numeric"
                       value={set.weightKg}
                       onChangeText={(v) => onUpdateSet(exerciseIndex, setIndex, 'weightKg', v)}
                     />
                   </View>
-                  <Text style={{ color: colors.muted, fontSize: 12 }}>סט {setIndex + 1}</Text>
+                  <Text style={{ color: colors.muted, fontSize: 12 }}>
+                    {t('workouts.setNumber', { number: setIndex + 1 })}
+                  </Text>
                 </Row>
               ))}
 
-              <Button title="הוסף סט" variant="secondary" onPress={() => onAddSet(exerciseIndex)} />
+              <Button title={t('workouts.addSet')} variant="secondary" onPress={() => onAddSet(exerciseIndex)} />
             </View>
           ))}
         </View>

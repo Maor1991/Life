@@ -1,6 +1,6 @@
 {
-  "name": "Life",
-  "short_name": "Life",
+  "name": "C'e la vie",
+  "short_name": "C'e la vie",
   "description": "מעקב אימונים, שינה ותזונה",
   "lang": "he",
   "dir": "rtl",
@@ -8,8 +8,8 @@
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "theme_color": "#F5F5F2",
-  "background_color": "#F5F5F2",
+  "theme_color": "#000000",
+  "background_color": "#000000",
   "icons": [
     { "src": "/logo192.png", "type": "image/png", "sizes": "192x192" },
     { "src": "/logo512.png", "type": "image/png", "sizes": "512x512" },

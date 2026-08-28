@@ -3,26 +3,23 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Button, Card, Row, Screen, SectionTitle } from '../../../src/components/ui';
 import { colors, spacing } from '../../../src/components/theme';
+import { useLanguage } from '../../../src/hooks/useLanguage';
 import { deleteSession, getSessionWithSets } from '../../../src/db/queries/workouts';
-import { WORKOUT_INTENSITY_TIERS, muscleLabel } from '../../../src/domain/workoutTypes';
+import { muscleLabel, workoutIntensityLabel, workoutTypeLabel } from '../../../src/domain/workoutTypes';
 import {
-  estimateCalories,
   formatDistance,
   formatDuration,
   formatPace,
   getDistanceConfig,
+  paceFieldLabel,
 } from '../../../src/domain/cardio';
-import { useProfile } from '../../../src/hooks/useProfile';
 import type { WorkoutSessionWithSets, WorkoutSet } from '../../../src/types';
-
-function intensityLabel(intensity: WorkoutSessionWithSets['intensity']): string {
-  return WORKOUT_INTENSITY_TIERS.find((t) => t.value === intensity)?.label ?? intensity;
-}
 
 export default function SessionDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { profile } = useProfile();
+  const { t, isRTL } = useLanguage();
+  const align = isRTL ? 'right' : 'left';
   const [session, setSession] = useState<WorkoutSessionWithSets | null>(null);
   const [loading, setLoading] = useState(true);
   const [openMuscle, setOpenMuscle] = useState<string | null>(null);
@@ -65,7 +62,7 @@ export default function SessionDetail() {
   if (!session) {
     return (
       <Screen>
-        <Text style={{ color: colors.muted, textAlign: 'right' }}>האימון לא נמצא</Text>
+        <Text style={{ color: colors.muted, textAlign: align }}>{t('session.notFound')}</Text>
       </Screen>
     );
   }
@@ -77,75 +74,56 @@ export default function SessionDetail() {
 
   return (
     <Screen>
-      <SectionTitle>{session.workoutType}</SectionTitle>
-      <Text style={{ color: colors.muted, textAlign: 'right' }}>
-        {session.date} · עצימות {intensityLabel(session.intensity)}
+      <SectionTitle>{workoutTypeLabel(session.workoutType, t)}</SectionTitle>
+      <Text style={{ color: colors.muted, textAlign: align }}>
+        {t('session.intensityLine', { date: session.date, intensity: workoutIntensityLabel(session.intensity, t) })}
       </Text>
       {(session.avgHeartRate || session.maxHeartRate) && (
-        <Text style={{ color: colors.muted, textAlign: 'right' }}>
-          {session.avgHeartRate ? `דופק ממוצע ${Math.round(session.avgHeartRate)}` : ''}
+        <Text style={{ color: colors.muted, textAlign: align }}>
+          {session.avgHeartRate ? t('session.avgHeartRateLine', { value: Math.round(session.avgHeartRate) }) : ''}
           {session.avgHeartRate && session.maxHeartRate ? ' · ' : ''}
-          {session.maxHeartRate ? `דופק מקסימלי ${Math.round(session.maxHeartRate)}` : ''}
+          {session.maxHeartRate ? t('session.maxHeartRateLine', { value: Math.round(session.maxHeartRate) }) : ''}
         </Text>
       )}
       {session.notes ? (
-        <Text style={{ color: colors.muted, textAlign: 'right' }}>{session.notes}</Text>
+        <Text style={{ color: colors.muted, textAlign: align }}>{session.notes}</Text>
       ) : null}
 
       {(session.distanceKm != null || session.durationMinutes != null) && (
         <Card>
-          <SectionTitle>נתוני המאמץ</SectionTitle>
+          <SectionTitle>{t('session.effortData')}</SectionTitle>
           {session.distanceKm != null && (
             <Row>
               <Text style={{ color: colors.text, fontWeight: '700' }}>
-                {formatDistance(session.distanceKm, session.workoutType)}
+                {formatDistance(session.distanceKm, session.workoutType, t)}
               </Text>
-              <Text style={{ color: colors.muted, textAlign: 'right' }}>מרחק</Text>
+              <Text style={{ color: colors.muted, textAlign: align }}>{t('session.distance')}</Text>
             </Row>
           )}
-          {formatDuration(session.durationMinutes) && (
+          {formatDuration(session.durationMinutes, t) && (
             <Row>
-              <Text style={{ color: colors.text }}>{formatDuration(session.durationMinutes)}</Text>
-              <Text style={{ color: colors.muted, textAlign: 'right' }}>משך</Text>
+              <Text style={{ color: colors.text }}>{formatDuration(session.durationMinutes, t)}</Text>
+              <Text style={{ color: colors.muted, textAlign: align }}>{t('session.duration')}</Text>
             </Row>
           )}
           {(() => {
             const config = getDistanceConfig(session.workoutType);
             if (!config) return null;
-            const pace = formatPace(session.distanceKm, session.durationMinutes, config.paceKind);
+            const pace = formatPace(session.distanceKm, session.durationMinutes, config.paceKind, t);
             if (!pace) return null;
             return (
               <Row>
                 <Text style={{ color: colors.accentText, fontWeight: '700' }}>{pace}</Text>
-                <Text style={{ color: colors.muted, textAlign: 'right' }}>{config.paceLabel}</Text>
+                <Text style={{ color: colors.muted, textAlign: align }}>{paceFieldLabel(config, t)}</Text>
               </Row>
             );
           })()}
           {session.elevationM ? (
             <Row>
-              <Text style={{ color: colors.text }}>{Math.round(session.elevationM)} מ׳</Text>
-              <Text style={{ color: colors.muted, textAlign: 'right' }}>עלייה מצטברת</Text>
+              <Text style={{ color: colors.text }}>{Math.round(session.elevationM)} {t('cardio.mUnit')}</Text>
+              <Text style={{ color: colors.muted, textAlign: align }}>{t('session.elevation')}</Text>
             </Row>
           ) : null}
-          {estimateCalories(
-            session.workoutType,
-            session.intensity,
-            session.durationMinutes,
-            profile?.weightKg ?? null
-          ) && (
-            <Row>
-              <Text style={{ color: colors.text }}>
-                {estimateCalories(
-                  session.workoutType,
-                  session.intensity,
-                  session.durationMinutes,
-                  profile?.weightKg ?? null
-                )}{' '}
-                קק״ל
-              </Text>
-              <Text style={{ color: colors.muted, textAlign: 'right' }}>שריפה משוערת</Text>
-            </Row>
-          )}
         </Card>
       )}
 
@@ -164,10 +142,10 @@ export default function SessionDetail() {
                 <Text style={{ color: colors.accentText, fontSize: 16 }}>{open ? '−' : '+'}</Text>
                 <View style={{ alignItems: 'flex-end' }}>
                   <Text style={{ color: colors.text, fontWeight: '700', fontSize: 16 }}>
-                    {muscleLabel(muscle)}
+                    {muscleLabel(muscle, t)}
                   </Text>
                   <Text style={{ color: colors.muted, fontSize: 11 }}>
-                    {Object.keys(byExercise).length} תרגילים · {sets.length} סטים
+                    {t('session.exercisesAndSets', { exercises: Object.keys(byExercise).length, sets: sets.length })}
                   </Text>
                 </View>
               </Row>
@@ -184,14 +162,16 @@ export default function SessionDetail() {
                     gap: 4,
                   }}
                 >
-                  <Text style={{ color: colors.text, fontWeight: '700', textAlign: 'right' }}>
+                  <Text style={{ color: colors.text, fontWeight: '700', textAlign: align }}>
                     {exerciseName}
                   </Text>
                   {exerciseSets.map((s) => (
                     <Row key={s.id}>
-                      <Text style={{ color: colors.muted, fontSize: 12 }}>סט {s.setNumber}</Text>
+                      <Text style={{ color: colors.muted, fontSize: 12 }}>
+                        {t('session.setNumber', { number: s.setNumber })}
+                      </Text>
                       <Text style={{ color: colors.text }}>
-                        {s.weightKg} ק״ג × {s.reps} חזרות
+                        {t('session.repsLine', { weight: s.weightKg, reps: s.reps })}
                       </Text>
                     </Row>
                   ))}
@@ -199,15 +179,15 @@ export default function SessionDetail() {
               ))}
 
             {open && sets.length === 0 && (
-              <Text style={{ color: colors.muted, fontSize: 12, textAlign: 'right' }}>
-                לא נרשמו תרגילים לשריר הזה
+              <Text style={{ color: colors.muted, fontSize: 12, textAlign: align }}>
+                {t('session.noExercisesForMuscle')}
               </Text>
             )}
           </Card>
         );
       })}
 
-      <Button title="מחק אימון" variant="danger" onPress={handleDelete} />
+      <Button title={t('session.deleteWorkout')} variant="danger" onPress={handleDelete} />
     </Screen>
   );
 }

@@ -10,6 +10,7 @@ interface MealRow {
   carbs_g: number;
   fat_g: number;
   items: unknown;
+  saved_meal_id: number | null;
 }
 
 /**
@@ -37,6 +38,7 @@ function toMeal(row: MealRow): Meal {
     carbsG: row.carbs_g,
     fatG: row.fat_g,
     items: parseItems(row.items),
+    savedMealId: row.saved_meal_id,
   };
 }
 
@@ -48,6 +50,7 @@ export interface NewMeal {
   carbsG: number;
   fatG: number;
   items: MealItem[];
+  savedMealId?: number | null;
 }
 
 function toMealPayload(meal: NewMeal) {
@@ -59,6 +62,7 @@ function toMealPayload(meal: NewMeal) {
     carbs_g: meal.carbsG,
     fat_g: meal.fatG,
     items: meal.items,
+    saved_meal_id: meal.savedMealId ?? null,
   };
 }
 
@@ -152,6 +156,21 @@ export async function addSavedMeal(meal: Omit<SavedMeal, 'id'>): Promise<number>
       .single<{ id: number }>()
   );
   return row.id;
+}
+
+export async function updateSavedMeal(id: number, meal: Omit<SavedMeal, 'id'>): Promise<void> {
+  unwrap(
+    await supabase
+      .from('saved_meals')
+      .update({
+        name: meal.name,
+        protein_g: meal.proteinG,
+        carbs_g: meal.carbsG,
+        fat_g: meal.fatG,
+        items: meal.items,
+      })
+      .eq('id', id)
+  );
 }
 
 export async function deleteSavedMeal(id: number): Promise<void> {

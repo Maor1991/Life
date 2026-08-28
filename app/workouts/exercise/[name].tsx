@@ -4,9 +4,11 @@ import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { LineChart } from 'react-native-gifted-charts';
 import { Card, Screen, SectionTitle } from '../../../src/components/ui';
 import { colors } from '../../../src/components/theme';
+import { useLanguage } from '../../../src/hooks/useLanguage';
 import { getExerciseHistory, type ExerciseHistoryPoint } from '../../../src/db/queries/workouts';
 
 export default function ExerciseProgress() {
+  const { t, isRTL } = useLanguage();
   const { name } = useLocalSearchParams<{ name: string }>();
   const exerciseName = decodeURIComponent(name ?? '');
   const [history, setHistory] = useState<ExerciseHistoryPoint[]>([]);
@@ -44,8 +46,8 @@ export default function ExerciseProgress() {
       <SectionTitle>{exerciseName}</SectionTitle>
       <Card>
         {data.length < 2 ? (
-          <Text style={{ color: colors.muted, textAlign: 'right' }}>
-            צריך לפחות שני אימונים עם התרגיל הזה כדי להציג גרף התקדמות
+          <Text style={{ color: colors.muted, textAlign: isRTL ? 'right' : 'left' }}>
+            {t('exercise.needTwoSessions')}
           </Text>
         ) : (
           <LineChart

@@ -1,37 +1,4 @@
-export type Sex = 'male' | 'female';
-
-export type ActivityLevel =
-  | 'sedentary'
-  | 'light'
-  | 'moderate'
-  | 'active'
-  | 'very_active';
-
 export type WorkoutIntensity = 'light' | 'moderate' | 'high' | 'very_high';
-
-export interface Profile {
-  id: number;
-  heightCm: number;
-  weightKg: number;
-  age: number;
-  sex: Sex;
-  activityLevel: ActivityLevel;
-  typicalIntensity: WorkoutIntensity;
-  weeklyWorkoutTarget: number;
-  sleepTargetHours: number;
-  weightWorkout: number;
-  weightSleep: number;
-  weightNutrition: number;
-}
-
-export type NewProfile = Omit<Profile, 'id'>;
-
-export interface MacroTargets {
-  calories: number;
-  proteinG: number;
-  carbsG: number;
-  fatG: number;
-}
 
 export interface WorkoutSession {
   id: number;
@@ -48,6 +15,8 @@ export interface WorkoutSession {
   distanceKm: number | null;
   durationMinutes: number | null;
   elevationM: number | null;
+  /** Set when this session was created by checking off a workout template on Home. */
+  templateId: number | null;
 }
 
 export interface WorkoutSet {
@@ -64,6 +33,14 @@ export interface WorkoutSessionWithSets extends WorkoutSession {
   sets: WorkoutSet[];
 }
 
+/** A saved workout routine, defined once in Settings and checked off daily on Home. */
+export interface WorkoutTemplate {
+  id: number;
+  name: string;
+  workoutType: string;
+  muscleGroups: string[];
+}
+
 export type SleepQuality = 1 | 2 | 3 | 4 | 5;
 
 export type SleepKind = 'night' | 'nap';
@@ -77,7 +54,7 @@ export interface SleepSession {
   quality: SleepQuality;
 }
 
-/** Per-day aggregate used by the daily score. */
+/** Per-day aggregate, used only to check which past dates have sleep logged. */
 export interface SleepDaySummary {
   date: string;
   hours: number;
@@ -102,6 +79,8 @@ export interface Meal {
   carbsG: number;
   fatG: number;
   items: MealItem[];
+  /** Set when this meal was created by checking off a saved meal on Home. */
+  savedMealId: number | null;
 }
 
 export interface SavedMeal {
@@ -111,12 +90,4 @@ export interface SavedMeal {
   carbsG: number;
   fatG: number;
   items: MealItem[];
-}
-
-export interface DailyScoreBreakdown {
-  date: string;
-  workoutPct: number;
-  sleepPct: number;
-  nutritionPct: number;
-  totalPct: number;
 }

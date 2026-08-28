@@ -118,6 +118,49 @@ create table if not exists public.saved_meals (
   items     jsonb not null default '[]'::jsonb
 );
 
+-- ------------------------------------------------------------ checklist ----
+-- Meals/sessions created by checking off a template on Home carry the
+-- template's id, so the checkbox state is derived by presence, not a
+-- separate join table.
+
+create table if not exists public.workout_templates (
+  id            bigint generated always as identity primary key,
+  user_id       uuid not null default auth.uid()
+                  references auth.users(id) on delete cascade,
+  name          text not null,
+  workout_type  text not null default 'חדר כושר',
+  muscle_groups jsonb not null default '[]'::jsonb
+);
+
+alter table public.meals
+  add column if not exists saved_meal_id bigint
+    references public.saved_meals(id) on delete set null;
+
+alter table public.workout_sessions
+  add column if not exists template_id bigint
+    references public.workout_templates(id) on delete set null;
+
+-- The daily calorie goal shown as "remaining" on Home. Computed from
+-- height/weight/age/sex + the planned weekly workout count and intensity
+-- (BMR/TDEE via the standard dietitian PAL bands), not workouts actually
+-- logged — calorie_goal is just the flat fallback used until the stats
+-- below are filled in.
+create table if not exists public.nutrition_goal (
+  id            bigint generated always as identity primary key,
+  user_id       uuid not null unique default auth.uid()
+                  references auth.users(id) on delete cascade,
+  calorie_goal  real not null default 2000,
+  height_cm     real,
+  weight_kg     real,
+  age           integer,
+  sex           text,
+  -- 0 = Sunday .. 6 = Saturday, or null for no rest day. On this weekday the
+  -- calendar doesn't require a workout to hit 100%.
+  rest_day_of_week integer,
+  workouts_per_week integer,
+  planned_intensity text
+);
+
 -- ------------------------------------------------------------------ RLS ----
 -- Without these policies the anon key would expose every user's data.
 
@@ -128,6 +171,8 @@ alter table public.sleep_sessions   enable row level security;
 alter table public.meals            enable row level security;
 alter table public.custom_foods     enable row level security;
 alter table public.saved_meals      enable row level security;
+alter table public.workout_templates enable row level security;
+alter table public.nutrition_goal    enable row level security;
 
 do $$
 declare
@@ -135,7 +180,8 @@ declare
 begin
   foreach t in array array[
     'profile', 'workout_sessions', 'workout_sets',
-    'sleep_sessions', 'meals', 'custom_foods', 'saved_meals'
+    'sleep_sessions', 'meals', 'custom_foods', 'saved_meals',
+    'workout_templates', 'nutrition_goal'
   ] loop
     execute format('drop policy if exists own_rows on public.%I', t);
     execute format(

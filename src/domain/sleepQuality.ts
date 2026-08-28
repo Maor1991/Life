@@ -3,60 +3,47 @@ import type { SleepKind, SleepQuality } from '../types';
 export interface SleepQualityTier {
   value: SleepQuality;
   label: string;
-  title: string;
-  description: string;
 }
 
 /**
  * Plain-language anchors for the 1-5 scale, so the rating means the same
- * thing from night to night instead of drifting with mood.
+ * thing from night to night instead of drifting with mood. Title/description
+ * text lives in the translations dictionary, keyed by `value`.
  */
 export const SLEEP_QUALITY_TIERS: SleepQualityTier[] = [
-  {
-    value: 1,
-    label: '1',
-    title: 'גרועה מאוד',
-    description: 'התעוררתי הרבה פעמים או כמעט לא נרדמתי. קמתי מותש לגמרי.',
-  },
-  {
-    value: 2,
-    label: '2',
-    title: 'גרועה',
-    description: 'התעוררתי כמה פעמים או התקשיתי להירדם. קמתי עייף.',
-  },
-  {
-    value: 3,
-    label: '3',
-    title: 'בינונית',
-    description: 'ישנתי פחות או יותר רצוף, אולי יקיצה אחת. קמתי סביר, לא רענן.',
-  },
-  {
-    value: 4,
-    label: '4',
-    title: 'טובה',
-    description: 'נרדמתי בקלות וישנתי כמעט בלי הפרעות. קמתי רענן.',
-  },
-  {
-    value: 5,
-    label: '5',
-    title: 'מצוינת',
-    description: 'שינה רצופה ועמוקה. קמתי מלא אנרגיה, בלי צורך בנודניק.',
-  },
+  { value: 1, label: '1' },
+  { value: 2, label: '2' },
+  { value: 3, label: '3' },
+  { value: 4, label: '4' },
+  { value: 5, label: '5' },
 ];
 
-export const SLEEP_KIND_OPTIONS: { label: string; value: SleepKind }[] = [
-  { label: 'שינת לילה', value: 'night' },
-  { label: 'תנומה', value: 'nap' },
-];
-
-export function sleepKindLabel(kind: SleepKind): string {
-  return SLEEP_KIND_OPTIONS.find((o) => o.value === kind)?.label ?? kind;
+export function sleepQualityTitle(value: SleepQuality, t: (key: string) => string): string {
+  return t(`sleepQuality.${value}.title`);
 }
 
-export function formatHours(hours: number): string {
+export function sleepQualityDescription(value: SleepQuality, t: (key: string) => string): string {
+  return t(`sleepQuality.${value}.description`);
+}
+
+export const SLEEP_KIND_VALUES: SleepKind[] = ['night', 'nap'];
+
+export function sleepKindLabel(kind: SleepKind, t: (key: string) => string): string {
+  return t(`sleepKind.${kind}`);
+}
+
+export function getSleepKindOptions(
+  t: (key: string) => string
+): { value: SleepKind; label: string }[] {
+  return SLEEP_KIND_VALUES.map((value) => ({ value, label: sleepKindLabel(value, t) }));
+}
+
+export function formatHours(hours: number, t: (key: string) => string): string {
   const whole = Math.floor(hours);
   const minutes = Math.round((hours - whole) * 60);
-  if (whole === 0) return `${minutes} דק׳`;
-  if (minutes === 0) return `${whole} שע׳`;
-  return `${whole} שע׳ ${minutes} דק׳`;
+  const min = t('sleep.minutesShort');
+  const hr = t('sleep.hoursShort');
+  if (whole === 0) return `${minutes} ${min}`;
+  if (minutes === 0) return `${whole} ${hr}`;
+  return `${whole} ${hr} ${minutes} ${min}`;
 }

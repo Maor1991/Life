@@ -1,18 +1,21 @@
 import React, { useState } from 'react';
-import { Modal, Pressable, Text, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { MonthCalendar } from './MonthCalendar';
-import { colors, spacing } from './theme';
+import { colors, shadows, spacing } from './theme';
 import { addDays, parseDate, today } from '../domain/dates';
+import { useLanguage } from '../hooks/useLanguage';
 
-const WEEKDAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
-
-export function formatDateLabel(date: string): string {
+export function formatDateLabel(date: string, t: (key: string, vars?: Record<string, string | number>) => string): string {
   const d = parseDate(date);
-  const t = today();
-  if (date === t) return 'היום';
-  if (date === addDays(t, -1)) return 'אתמול';
-  if (date === addDays(t, 1)) return 'מחר';
-  return `יום ${WEEKDAYS[d.getDay()]}, ${d.getDate()}.${d.getMonth() + 1}`;
+  const now = today();
+  if (date === now) return t('common.today');
+  if (date === addDays(now, -1)) return t('common.yesterday');
+  if (date === addDays(now, 1)) return t('common.tomorrow');
+  return t('common.dateLabel', {
+    weekday: t(`common.weekday.${d.getDay()}`),
+    day: d.getDate(),
+    month: d.getMonth() + 1,
+  });
 }
 
 export function DateNavigator({
@@ -24,9 +27,23 @@ export function DateNavigator({
   onChange: (date: string) => void;
   allowFuture?: boolean;
 }) {
+  const { t, isRTL } = useLanguage();
   const [calendarOpen, setCalendarOpen] = useState(false);
   const isToday = date === today();
   const canGoForward = allowFuture || date < today();
+
+  function goPrev() {
+    onChange(addDays(date, -1));
+  }
+  function goNext() {
+    if (canGoForward) onChange(addDays(date, 1));
+  }
+
+  // Position is fixed (previous stays on the left, next on the right) so the
+  // control never "jumps" between languages — only the chevron glyph swaps,
+  // matching the RTL convention of a right-pointing "back" chevron.
+  const prevGlyph = isRTL ? '›' : '‹';
+  const nextGlyph = isRTL ? '‹' : '›';
 
   return (
     <View style={{ gap: spacing.xs }}>
@@ -36,37 +53,38 @@ export function DateNavigator({
           alignItems: 'center',
           justifyContent: 'space-between',
           backgroundColor: colors.cardAlt,
-          borderRadius: 12,
+          borderRadius: 16,
           borderWidth: 1,
           borderColor: colors.border,
-          paddingHorizontal: spacing.sm,
+          paddingHorizontal: spacing.xs,
           paddingVertical: spacing.xs,
+          ...shadows.card,
         }}
       >
-        {/* In RTL, moving forward in time reads leftward. */}
-        <Pressable
-          onPress={() => canGoForward && onChange(addDays(date, 1))}
-          disabled={!canGoForward}
-          style={{ padding: spacing.xs, opacity: canGoForward ? 1 : 0.3 }}
-        >
-          <Text style={{ color: colors.accentText, fontSize: 20, fontWeight: '700' }}>‹</Text>
+        <Pressable onPress={goPrev} hitSlop={8} style={styles.navCircle}>
+          <Text style={styles.navGlyph}>{prevGlyph}</Text>
         </Pressable>
 
         <Pressable onPress={() => setCalendarOpen(true)} style={{ alignItems: 'center', flex: 1 }}>
           <Text style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>
-            {formatDateLabel(date)}
+            {formatDateLabel(date, t)}
           </Text>
-          <Text style={{ color: colors.muted, fontSize: 11 }}>{date} · לבחירת תאריך</Text>
+          <Text style={{ color: colors.muted, fontSize: 11 }}>{date} · {t('common.pickDate')}</Text>
         </Pressable>
 
-        <Pressable onPress={() => onChange(addDays(date, -1))} style={{ padding: spacing.xs }}>
-          <Text style={{ color: colors.accentText, fontSize: 20, fontWeight: '700' }}>›</Text>
+        <Pressable
+          onPress={goNext}
+          disabled={!canGoForward}
+          hitSlop={8}
+          style={[styles.navCircle, { opacity: canGoForward ? 1 : 0.3 }]}
+        >
+          <Text style={styles.navGlyph}>{nextGlyph}</Text>
         </Pressable>
       </View>
 
       {!isToday && (
         <Pressable onPress={() => onChange(today())} style={{ alignSelf: 'center' }}>
-          <Text style={{ color: colors.accentText, fontSize: 13 }}>חזור להיום</Text>
+          <Text style={{ color: colors.accentText, fontSize: 13 }}>{t('common.backToToday')}</Text>
         </Pressable>
       )}
 
@@ -119,7 +137,7 @@ export function DateNavigator({
                 borderColor: colors.border,
               }}
             >
-              <Text style={{ color: colors.text, fontWeight: '700' }}>היום</Text>
+              <Text style={{ color: colors.text, fontWeight: '700' }}>{t('common.today')}</Text>
             </Pressable>
           </Pressable>
         </Pressable>
@@ -127,3 +145,21 @@ export function DateNavigator({
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  navCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navGlyph: {
+    color: colors.accentText,
+    fontSize: 18,
+    fontWeight: '700',
+  },
+});

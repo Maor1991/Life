@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Life",
+    "name": "C'e la vie",
     "slug": "Life",
     "version": "1.0.0",
     "scheme": "life",
@@ -20,11 +20,16 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "name": "C'e la vie",
+      "shortName": "C'e la vie",
+      "themeColor": "#000000",
+      "backgroundColor": "#000000"
     },
     "plugins": [
       "expo-router",
-      "expo-status-bar"
+      "expo-status-bar",
+      "expo-font"
     ],
     "extra": {
       "router": {},

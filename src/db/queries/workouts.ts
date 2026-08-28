@@ -13,6 +13,7 @@ interface SessionRow {
   distance_km: number | null;
   duration_minutes: number | null;
   elevation_m: number | null;
+  template_id: number | null;
 }
 
 interface SetRow {
@@ -47,6 +48,7 @@ function toSession(row: SessionRow): WorkoutSession {
     distanceKm: row.distance_km,
     durationMinutes: row.duration_minutes,
     elevationM: row.elevation_m,
+    templateId: row.template_id,
   };
 }
 
@@ -86,6 +88,7 @@ export interface NewSession {
   durationMinutes: number | null;
   elevationM: number | null;
   sets: NewSet[];
+  templateId?: number | null;
 }
 
 function toSessionPayload(session: NewSession) {
@@ -100,6 +103,7 @@ function toSessionPayload(session: NewSession) {
     distance_km: session.distanceKm,
     duration_minutes: session.durationMinutes,
     elevation_m: session.elevationM,
+    template_id: session.templateId ?? null,
   };
 }
 

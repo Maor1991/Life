@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { colors, spacing } from './theme';
+import { useLanguage } from '../hooks/useLanguage';
 
 const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
 
@@ -19,6 +20,7 @@ export function TimePicker({
   value: string;
   onChange: (time: string) => void;
 }) {
+  const { t, isRTL } = useLanguage();
   const [open, setOpen] = useState(false);
   const hour = value.split(':')[0];
 
@@ -29,7 +31,7 @@ export function TimePicker({
 
   return (
     <View style={{ gap: spacing.xs }}>
-      <Text style={{ color: colors.muted, fontSize: 13, textAlign: 'right' }}>{label}</Text>
+      <Text style={{ color: colors.muted, fontSize: 13, textAlign: isRTL ? 'right' : 'left' }}>{label}</Text>
 
       <View style={{ flexDirection: 'row', gap: spacing.xs, alignItems: 'center' }}>
         <Pressable
@@ -43,7 +45,7 @@ export function TimePicker({
             borderColor: colors.border,
           }}
         >
-          <Text style={{ color: colors.accentText, fontSize: 13 }}>עכשיו</Text>
+          <Text style={{ color: colors.accentText, fontSize: 13 }}>{t('common.now')}</Text>
         </Pressable>
 
         <Pressable
@@ -58,7 +60,7 @@ export function TimePicker({
             borderColor: colors.border,
           }}
         >
-          <Text style={{ color: colors.text, fontSize: 16, textAlign: 'right' }}>{value}</Text>
+          <Text style={{ color: colors.text, fontSize: 16, textAlign: isRTL ? 'right' : 'left' }}>{value}</Text>
         </Pressable>
       </View>
 
@@ -91,7 +93,7 @@ export function TimePicker({
             <ScrollView>
               <View
                 style={{
-                  flexDirection: 'row-reverse',
+                  flexDirection: isRTL ? 'row-reverse' : 'row',
                   flexWrap: 'wrap',
                   gap: spacing.xs,
                   justifyContent: 'center',
@@ -133,7 +135,7 @@ export function TimePicker({
                 borderColor: colors.border,
               }}
             >
-              <Text style={{ color: colors.text, fontWeight: '700', fontSize: 16 }}>סגור</Text>
+              <Text style={{ color: colors.text, fontWeight: '700', fontSize: 16 }}>{t('common.close')}</Text>
             </Pressable>
           </Pressable>
         </Pressable>
